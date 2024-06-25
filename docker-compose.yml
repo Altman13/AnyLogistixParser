@@ -1,0 +1,6 @@
+﻿services:
+  anylogistixparser:
+    image: anylogistixparser
+    build:
+      context: .
+      dockerfile: AnyLogistixParser/Dockerfile
