@@ -39,3 +39,6 @@ C:\project\AnyLogistixParser\AnyLogistixParser\bin\Debug\net8.0\ExcelNumberForma
 C:\project\AnyLogistixParser\AnyLogistixParser\bin\Debug\net8.0\RBush.dll
 C:\project\AnyLogistixParser\AnyLogistixParser\bin\Debug\net8.0\SixLabors.Fonts.dll
 C:\project\AnyLogistixParser\AnyLogistixParser\bin\Debug\net8.0\System.IO.Packaging.dll
+C:\project\AnyLogistixParser\AnyLogistixParser\bin\Debug\net8.0\HtmlAgilityPack.dll
+C:\project\AnyLogistixParser\AnyLogistixParser\obj\Debug\net8.0\AnyLogistixParser.sourcelink.json
+C:\project\AnyLogistixParser\AnyLogistixParser\bin\Debug\net8.0\Newtonsoft.Json.dll

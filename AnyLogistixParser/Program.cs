@@ -1,7 +1,13 @@
-﻿using System.Net;
+﻿using System;
+using System.IO;
+using System.Linq;
+using System.Net;
 using ClosedXML.Excel;
 
-
+class Program
+{
+    static void Main()
+    {
         string downloadUrl = "https://m-invest.ru/upload/iblock/646/m9gjk826078xpcl08pzdcjw26003dzek.xlsx";
         string downloadedFilePath = @"downloaded_file.xlsx";
         string projectFilePath = @"Scenario from Template 16_12_43 test.xlsx";
@@ -38,95 +44,97 @@ using ClosedXML.Excel;
         // Обработка скачанного файла
         try
         {
+            double totalPriceRub = 0.0;
+            int priceCount = 0;
+
             using (var workbook = new XLWorkbook(downloadedFilePath))
             {
-                foreach (var worksheet in workbook.Worksheets)
+                var worksheet = workbook.Worksheet(4); // Предполагаем, что данные находятся в четвертом листе
+                foreach (var row in worksheet.RowsUsed().Skip(1)) // Пропускаем заголовок
                 {
-                    // Пропускаем лист "Сортовый прокат"
-                    if (worksheet.Name == "Сортовый прокат")
+                    var priceCell = row.Cell(3); // Предполагаем, что цена в третьем столбце
+                    if (double.TryParse(priceCell.GetValue<string>().Replace(" ", ""), out double price))
                     {
-                        continue;
+                        totalPriceRub += price;
+                        priceCount++;
+                    }
+                }
+            }
+
+            if (priceCount > 0)
+            {
+                double weightedAveragePriceRub = totalPriceRub / priceCount;
+                Console.WriteLine($"Средневзвешенная цена арматуры: {weightedAveragePriceRub} руб.");
+
+                // Умножаем на коэффициент
+                double priceWithCoef = weightedAveragePriceRub * 0.63;
+
+                // Получение текущего курса доллара (замените на ваш код получения курса доллара)
+                double usdRub = 75.0; // Пример значения курса доллара
+
+                // Конвертация цены в доллары
+                double priceUsd = priceWithCoef / usdRub;
+                Console.WriteLine($"Цена в долларах: {priceUsd}");
+
+                // Обработка файла проекта
+                using (var workbook = new XLWorkbook(projectFilePath))
+                {
+                    var customConstraintsSheet = workbook.Worksheet("Custom Constraints");
+                    var linearExpressionsSheet = workbook.Worksheet("Linear expressions");
+
+                    // Проверяем, что листы существуют
+                    if (customConstraintsSheet == null || linearExpressionsSheet == null)
+                    {
+                        Console.WriteLine("Листы 'Custom Constraints' или 'Linear expressions' не найдены в файле проекта.");
+                        return;
                     }
 
-                    Console.WriteLine($"Поиск в листе '{worksheet.Name}':");
-
-                    foreach (var row in worksheet.RowsUsed())
+                    // Находим строку с меткой Slab и подставляем значения
+                    foreach (var row in customConstraintsSheet.RowsUsed())
                     {
-                        bool containsKeyword = false;
-
                         foreach (var cell in row.Cells())
                         {
-                            if (cell.GetValue<string>().Contains("Арматура"))
+                            if (cell.GetValue<string>().Contains("Slab"))
                             {
-                                containsKeyword = true;
-                                break;
+                                var linearExpressionNum = cell.GetValue<string>().Split().Last();
+                                foreach (var exprRow in linearExpressionsSheet.RowsUsed())
+                                {
+                                    if (exprRow.FirstCell().GetValue<string>().Contains(linearExpressionNum))
+                                    {
+                                        foreach (var exprCell in exprRow.Cells())
+                                        {
+                                            if (exprCell.GetValue<string>().Contains("[·o52]"))
+                                            {
+                                                exprCell.Value = priceWithCoef;
+                                            }
+                                            else if (exprCell.GetValue<string>().Contains("[·o53]"))
+                                            {
+                                                exprCell.Value = priceUsd;
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                        }
-
-                        if (containsKeyword)
-                        {
-                            foreach (var cell in row.Cells())
-                            {
-                                Console.Write(cell.GetValue<string>() + "\t");
-                            }
-                            Console.WriteLine();
                         }
                     }
 
-                    Console.WriteLine(); // Добавляем пустую строку для отделения выводов
+                    // Сохраняем файл
+                    workbook.SaveAs("Updated_" + projectFilePath);
                 }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Ошибка при чтении скаченного файла Excel: " + ex.Message);
-        }
 
-        // Обработка файла проекта
-        try
-        {
-            using (var workbook = new XLWorkbook(projectFilePath))
+                Console.WriteLine("Данные успешно обновлены в файле проекта.");
+            }
+            else
             {
-                // Получаем объекты Worksheet для листов "Custom Constraints" и "Linear expressions"
-                var customConstraintsSheet = workbook.Worksheet("Custom Constraints");
-                var linearExpressionsSheet = workbook.Worksheet("Linear expressions");
-
-                // Проверяем, что листы существуют
-                if (customConstraintsSheet == null || linearExpressionsSheet == null)
-                {
-                    Console.WriteLine("Листы 'Custom Constraints' или 'Linear expressions' не найдены в файле проекта.");
-                    return;
-                }
-
-                // Выводим данные из листа "Custom Constraints"
-                Console.WriteLine($"Содержимое листа 'Custom Constraints':");
-                foreach (var row in customConstraintsSheet.RowsUsed())
-                {
-                    foreach (var cell in row.Cells())
-                    {
-                        Console.Write(cell.GetValue<string>() + "\t");
-                    }
-                    Console.WriteLine();
-                }
-
-                Console.WriteLine(); // Добавляем пустую строку для отделения выводов
-
-                // Выводим данные из листа "Linear expressions"
-                Console.WriteLine($"Содержимое листа 'Linear expressions':");
-                foreach (var row in linearExpressionsSheet.RowsUsed())
-                {
-                    foreach (var cell in row.Cells())
-                    {
-                        Console.Write(cell.GetValue<string>() + "\t");
-                    }
-                    Console.WriteLine();
-                }
+                Console.WriteLine("Не удалось найти данные о цене арматуры в скачанном файле.");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Ошибка при чтении файла проекта Excel: " + ex.Message);
+            Console.WriteLine("Ошибка при обработке файлов: " + ex.Message);
         }
 
         Console.WriteLine("Нажмите любую клавишу для выхода...");
         Console.ReadKey();
+    }
+}
