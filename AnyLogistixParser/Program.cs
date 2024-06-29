@@ -1,12 +1,10 @@
-﻿using System;
-using System.IO;
-using System.Net;
-using System.Net.Http;
-using System.Threading.Tasks;
+﻿using System.Net;
 using ClosedXML.Excel;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+
+namespace AnyLogistixParser;
 
 class Program
 {
@@ -182,6 +180,10 @@ class Program
                                             else if (exprCell.GetValue<string>().Contains("[·o53]"))
                                             {
                                                 exprCell.Value = priceUsd;
+                                            }
+                                            else if (exprCell.GetValue<string>().Contains("[·o51]"))
+                                            {
+                                                exprCell.Value = priceUsd; // Вставляем значение долларовой цифры
                                             }
                                         }
                                     }
