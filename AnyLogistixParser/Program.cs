@@ -1,58 +1,105 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
 using System.Net;
-using ClosedXML.Excel;
+using System.Net.Http;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 
 class Program
 {
-    static void Main()
-    {
-        string downloadUrl = "https://m-invest.ru/upload/iblock/646/m9gjk826078xpcl08pzdcjw26003dzek.xlsx";
-        string downloadedFilePath = @"downloaded_file.xlsx";
-        string projectFilePath = @"Scenario from Template 16_12_43 test.xlsx";
+    static IConfigurationRoot configuration;
+    static ILogger logger;
 
-        // Скачиваем файл по указанной ссылке
+    // Метод для получения текущего курса USD к RUB
+    static async Task<double> GetUsdToRubExchangeRate()
+    {
+        double defaultRate = 90.0;
+        try
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                string url = configuration["ExchangeRateApiUrl"];
+                HttpResponseMessage response = await client.GetAsync(url);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    string jsonResponse = await response.Content.ReadAsStringAsync();
+                    JObject data = JObject.Parse(jsonResponse);
+                    double usdToRub = (double)data["rates"]["RUB"];
+                    return usdToRub;
+                }
+                else
+                {
+                    logger.LogWarning($"Не удалось получить курс обмена. Код состояния: {response.StatusCode}");
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            logger.LogError($"Ошибка при получении курса обмена: {e.Message}");
+        }
+        return defaultRate;
+    }
+
+    static async Task Main(string[] args)
+    {
+        // Создаем построитель конфигурации
+        var builder = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+
+        // Считываем конфигурацию из файла
+        configuration = builder.Build();
+
+        // Настраиваем логирование
+        var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.AddConsole(); // Добавляем консольный логгер
+        });
+
+        logger = loggerFactory.CreateLogger<Program>(); // Создаем логгер для текущего класса Program
+
+        // Читаем URL для скачивания и пути к файлам из конфигурации
+        string downloadUrl = configuration["DownloadUrl"];
+        string downloadedFilePath = @"downloaded_file.xlsx";
+        string projectFilePath = configuration["ProjectFilePath"];
+
+        // Попытка скачивания файла
         try
         {
             using (WebClient webClient = new WebClient())
             {
                 webClient.DownloadFile(downloadUrl, downloadedFilePath);
-                Console.WriteLine("Файл успешно скачан.");
+                logger.LogInformation("Файл успешно скачан.");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка при скачивании файла по ссылке {downloadUrl}: {ex.Message}");
+            logger.LogError($"Ошибка при скачивании файла по ссылке {downloadUrl}: {ex.Message}");
             return;
         }
 
         // Проверяем, существует ли скачанный файл
         if (!File.Exists(downloadedFilePath))
         {
-            Console.WriteLine("Скачанный файл не найден: " + downloadedFilePath);
+            logger.LogError($"Скачанный файл не найден: {downloadedFilePath}");
             return;
         }
 
-        // Проверяем, существует ли файл проекта
-        if (!File.Exists(projectFilePath))
-        {
-            Console.WriteLine("Файл проекта не найден: " + projectFilePath);
-            return;
-        }
-
-        // Обработка скачанного файла
+        // Обработка данных из скачанного файла
         try
         {
             double totalPriceRub = 0.0;
             int priceCount = 0;
 
-            using (var workbook = new XLWorkbook(downloadedFilePath))
+            using (var workbook = new ClosedXML.Excel.XLWorkbook(downloadedFilePath))
             {
-                var worksheet = workbook.Worksheet(4); // Предполагаем, что данные находятся в четвертом листе
+                var worksheet = workbook.Worksheet(4); // Предполагаем, что данные находятся на 4-м листе
                 foreach (var row in worksheet.RowsUsed().Skip(1)) // Пропускаем заголовок
                 {
-                    var priceCell = row.Cell(3); // Предполагаем, что цена в третьем столбце
+                    var priceCell = row.Cell(3); // Предполагаем, что цена находится в третьем столбце
                     if (double.TryParse(priceCell.GetValue<string>().Replace(" ", ""), out double price))
                     {
                         totalPriceRub += price;
@@ -61,35 +108,37 @@ class Program
                 }
             }
 
+            // Если найдены данные о ценах
             if (priceCount > 0)
             {
                 double weightedAveragePriceRub = totalPriceRub / priceCount;
-                Console.WriteLine($"Средневзвешенная цена арматуры: {weightedAveragePriceRub} руб.");
+                logger.LogInformation($"Средневзвешенная цена арматуры: {weightedAveragePriceRub} руб.");
 
-                // Умножаем на коэффициент
+                // Расчет цены с коэффициентом
                 double priceWithCoef = weightedAveragePriceRub * 0.63;
 
-                // Получение текущего курса доллара (замените на ваш код получения курса доллара)
-                double usdRub = 75.0; // Пример значения курса доллара
+                // Получение текущего курса доллара к рублю
+                double usdRub = await GetUsdToRubExchangeRate();
+                logger.LogInformation($"Текущий курс доллара к рублю: {usdRub}");
 
                 // Конвертация цены в доллары
                 double priceUsd = priceWithCoef / usdRub;
-                Console.WriteLine($"Цена в долларах: {priceUsd}");
+                logger.LogInformation($"Цена в долларах: {priceUsd}");
 
                 // Обработка файла проекта
-                using (var workbook = new XLWorkbook(projectFilePath))
+                using (var projectWorkbook = new ClosedXML.Excel.XLWorkbook(projectFilePath))
                 {
-                    var customConstraintsSheet = workbook.Worksheet("Custom Constraints");
-                    var linearExpressionsSheet = workbook.Worksheet("Linear expressions");
+                    var customConstraintsSheet = projectWorkbook.Worksheet("Custom Constraints");
+                    var linearExpressionsSheet = projectWorkbook.Worksheet("Linear expressions");
 
-                    // Проверяем, что листы существуют
+                    // Проверяем, что нужные листы существуют
                     if (customConstraintsSheet == null || linearExpressionsSheet == null)
                     {
-                        Console.WriteLine("Листы 'Custom Constraints' или 'Linear expressions' не найдены в файле проекта.");
+                        logger.LogError("Листы 'Custom Constraints' или 'Linear expressions' не найдены в файле проекта.");
                         return;
                     }
 
-                    // Находим строку с меткой Slab и подставляем значения
+                    // Находим строку с меткой Slab и обновляем значения
                     foreach (var row in customConstraintsSheet.RowsUsed())
                     {
                         foreach (var cell in row.Cells())
@@ -118,23 +167,23 @@ class Program
                         }
                     }
 
-                    // Сохраняем файл
-                    workbook.SaveAs("Updated_" + projectFilePath);
+                    // Сохраняем измененный файл проекта
+                    projectWorkbook.SaveAs("Updated_" + projectFilePath);
                 }
 
-                Console.WriteLine("Данные успешно обновлены в файле проекта.");
+                logger.LogInformation("Данные успешно обновлены в файле проекта.");
             }
             else
             {
-                Console.WriteLine("Не удалось найти данные о цене арматуры в скачанном файле.");
+                logger.LogWarning("Не удалось найти данные о цене арматуры в скачанном файле.");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Ошибка при обработке файлов: " + ex.Message);
+            logger.LogError($"Ошибка при обработке файлов: {ex.Message}");
         }
 
-        Console.WriteLine("Нажмите любую клавишу для выхода...");
+        logger.LogInformation("Нажмите любую клавишу для выхода...");
         Console.ReadKey();
     }
 }
