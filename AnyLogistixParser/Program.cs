@@ -3,6 +3,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
+using ClosedXML.Excel;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
@@ -66,6 +67,12 @@ class Program
         string downloadedFilePath = @"downloaded_file.xlsx";
         string projectFilePath = configuration["ProjectFilePath"];
 
+        // Читаем настройки для обработки Excel файла
+        int sheetNumber = int.Parse(configuration["ExcelSettings:SheetNumber"]);
+        int priceColumn = int.Parse(configuration["ExcelSettings:PriceColumn"]);
+        int skipRows = int.Parse(configuration["ExcelSettings:SkipRows"]);
+        string searchString = configuration["ExcelSettings:SearchString"];
+
         // Попытка скачивания файла
         try
         {
@@ -88,20 +95,36 @@ class Program
             return;
         }
 
+        // Проверяем, существует ли файл проекта
+        if (!File.Exists(projectFilePath))
+        {
+            logger.LogError($"Файл проекта не найден: {projectFilePath}");
+            return;
+        }
+
         // Обработка данных из скачанного файла
         try
         {
             double totalPriceRub = 0.0;
             int priceCount = 0;
+            bool startParsing = false;
 
-            using (var workbook = new ClosedXML.Excel.XLWorkbook(downloadedFilePath))
+            using (var workbook = new XLWorkbook(downloadedFilePath))
             {
-                var worksheet = workbook.Worksheet(4); // Предполагаем, что данные находятся на 4-м листе
-                foreach (var row in worksheet.RowsUsed().Skip(1)) // Пропускаем заголовок
+                var worksheet = workbook.Worksheet(sheetNumber); // Номер листа из конфигурации
+                foreach (var row in worksheet.RowsUsed().Skip(skipRows)) // Количество пропускаемых строк из конфигурации
                 {
-                    var priceCell = row.Cell(3); // Предполагаем, что цена находится в третьем столбце
+                    var firstCell = row.Cell(1).GetValue<string>();
+                    if (!startParsing && firstCell.Contains(searchString)) // Строка поиска из конфигурации
+                    {
+                        startParsing = true; // Начинаем парсинг, если нашли строку с поисковой строкой
+                    }
+
+                    var itemName = row.Cell(1).GetValue<string>();
+                    var priceCell = row.Cell(priceColumn); // Номер столбца из конфигурации
                     if (double.TryParse(priceCell.GetValue<string>().Replace(" ", ""), out double price))
                     {
+                        Console.WriteLine($"Номенклатура: {itemName}, Цена: {price} руб.");
                         totalPriceRub += price;
                         priceCount++;
                     }
@@ -126,7 +149,7 @@ class Program
                 logger.LogInformation($"Цена в долларах: {priceUsd}");
 
                 // Обработка файла проекта
-                using (var projectWorkbook = new ClosedXML.Excel.XLWorkbook(projectFilePath))
+                using (var projectWorkbook = new XLWorkbook(projectFilePath))
                 {
                     var customConstraintsSheet = projectWorkbook.Worksheet("Custom Constraints");
                     var linearExpressionsSheet = projectWorkbook.Worksheet("Linear expressions");
