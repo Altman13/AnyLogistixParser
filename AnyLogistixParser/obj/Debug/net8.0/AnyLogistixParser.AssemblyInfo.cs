@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AnyLogistixParser")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9b733ba6db5b94a0f3fffb4df6291b2b709ab8b0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9ce1269881ade2c67fa26421a41e4a7203dff165")]
 [assembly: System.Reflection.AssemblyProductAttribute("AnyLogistixParser")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AnyLogistixParser")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

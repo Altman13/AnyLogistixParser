@@ -41,6 +41,10 @@ namespace AnyLogistixParser
             double usdRub = await GetUsdToRubExchangeRate();
 
             int roundedPriceUsd = (int)Math.Round(roundedPriceWithCoef / usdRub);
+            
+            logger.LogInformation($"Средневзвешенная цена в рублях: {weightedAveragePriceRub}");
+            logger.LogInformation($"Округленная цена с коэффициентом в рублях: {roundedPriceWithCoef}");
+            logger.LogInformation($"Округленная цена в долларах: {roundedPriceUsd}");
 
             UpdateProjectFile(projectFilePath, slabValues, roundedPriceUsd, roundedPriceWithCoef);
         }
