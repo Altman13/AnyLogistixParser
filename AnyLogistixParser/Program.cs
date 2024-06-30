@@ -55,10 +55,10 @@ namespace AnyLogistixParser
             // Настраиваем логирование
             var loggerFactory = LoggerFactory.Create(logging =>
             {
-                logging.AddConsole(); // Добавляем консольный логгер
+                logging.AddConsole();
             });
 
-            logger = loggerFactory.CreateLogger<Program>(); // Создаем логгер для текущего класса Program
+            logger = loggerFactory.CreateLogger<Program>();
 
             // Читаем URL для скачивания и пути к файлам из конфигурации
             string downloadUrl = configuration["DownloadUrl"];
@@ -86,23 +86,20 @@ namespace AnyLogistixParser
                 return;
             }
 
-            // Проверяем, существует ли скачанный файл
             if (!File.Exists(downloadedFilePath))
             {
                 logger.LogError($"Скачанный файл не найден: {downloadedFilePath}");
                 return;
             }
 
-            // Проверяем, существует ли файл проекта
             if (!File.Exists(projectFilePath))
             {
                 logger.LogError($"Файл проекта не найден: {projectFilePath}");
                 return;
             }
 
-            // Новый массив для хранения значений из ячеек C
-            var slabValues = new List<int>();
 
+            var slabValues = new List<int>();
             // Парсинг листа Custom Constraints
             try
             {
@@ -139,10 +136,8 @@ namespace AnyLogistixParser
                 return;
             }
 
-            // Логируем найденные значения
             logger.LogInformation($"Найденные значения из ячеек C: {string.Join(", ", slabValues)}");
 
-            // Обработка данных из скачанного файла
             try
             {
                 double totalPriceRub = 0.0;
@@ -157,13 +152,13 @@ namespace AnyLogistixParser
                         var firstCell = row.Cell(1).GetValue<string>();
                         if (!startParsing && firstCell.Contains(searchString)) // Строка поиска из конфигурации
                         {
-                            startParsing = true; // Начинаем парсинг, если нашли строку с поисковой строкой
+                            startParsing = true;
                         }
 
                         if (startParsing)
                         {
                             var itemName = row.Cell(1).GetValue<string>();
-                            var priceCell = row.Cell(priceColumn); // Номер столбца из конфигурации
+                            var priceCell = row.Cell(priceColumn);
                             if (double.TryParse(priceCell.GetValue<string>().Replace(" ", ""), out double price))
                             {
                                 Console.WriteLine($"Номенклатура: {itemName}, Цена: {price} руб.");
@@ -203,7 +198,6 @@ namespace AnyLogistixParser
                     {
                         var linearExpressionsSheet = projectWorkbook.Worksheet("Linear expressions");
 
-                        // Проверяем, что нужный лист существует
                         if (linearExpressionsSheet == null)
                         {
                             logger.LogError("Лист 'Linear expressions' не найден в файле проекта.");
