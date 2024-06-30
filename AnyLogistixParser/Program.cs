@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
-
+using System.Text.RegularExpressions;
 namespace AnyLogistixParser
 {
     class Program
@@ -100,6 +100,48 @@ namespace AnyLogistixParser
                 return;
             }
 
+            // Новый массив для хранения значений из ячеек C
+            var slabValues = new List<int>();
+
+            // Парсинг листа Custom Constraints
+            try
+            {
+                using (var workbook = new XLWorkbook(projectFilePath))
+                {
+                    var customConstraintsSheet = workbook.Worksheet("Custom Constraints");
+
+                    if (customConstraintsSheet != null)
+                    {
+                        foreach (var row in customConstraintsSheet.RowsUsed())
+                        {
+                            var cellA = row.Cell(1).GetValue<string>();
+                            if (cellA.Contains("Slab [·o52]") || cellA.Contains("Slab [·o53]") || cellA.Contains("Slab [·o51]"))
+                            {
+                                var linearExpression = row.Cell(3).GetValue<string>();
+                                var match = Regex.Match(linearExpression, @"\d+");
+                                if (match.Success && int.TryParse(match.Value, out int value))
+                                {
+                                    slabValues.Add(value);
+                                    logger.LogInformation($"Добавлено значение Linear Expression: {value}");
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        logger.LogWarning("Лист 'Custom Constraints' не найден в файле проекта.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"Ошибка при обработке листа 'Custom Constraints': {ex.Message}");
+                return;
+            }
+
+            // Логируем найденные значения
+            logger.LogInformation($"Найденные значения из ячеек C: {string.Join(", ", slabValues)}");
+
             // Обработка данных из скачанного файла
             try
             {
@@ -168,53 +210,60 @@ namespace AnyLogistixParser
                             return;
                         }
 
-                        // Находим строку с меткой "Slab" в столбце D и обновляем значения в столбце C
+                        // Находим строку с меткой "Slab" в столбце D и обновляем значения в столбце C, если в ячейке A есть совпадение
                         foreach (var row in linearExpressionsSheet.RowsUsed())
                         {
-                            var cell = row.Cell("D");
-                            if (cell.GetValue<string>().Contains("Slab [·o51]"))
+                            var cellD = row.Cell("D").GetValue<string>();
+                            var cellA = row.Cell("A").GetValue<string>();
+
+                            // Извлечение числа из ячейки A и проверка на совпадение
+                            var match = Regex.Match(cellA, @"\d+");
+                            if (match.Success && int.TryParse(match.Value, out int cellAValue) && slabValues.Contains(cellAValue))
                             {
-                                var linearExpressionNum = cell.GetValue<string>().Split().Last();
-                                var targetCell = row.Cell("C");
-                                logger.LogInformation($"Обновляем [·o52] в столбце C с {targetCell.Value} до {roundedPriceUsd}");
-                                targetCell.Value = roundedPriceUsd;
-                            }
-                            else if (cell.GetValue<string>().Contains("Slab [·o52]"))
-                            {
-                                var linearExpressionNum = cell.GetValue<string>().Split().Last();
-                                var targetCell = row.Cell("C");
-                                logger.LogInformation($"Обновляем [·o52] в столбце C с {targetCell.Value} до {roundedPriceWithCoef}");
-                                targetCell.Value = roundedPriceWithCoef;
-                            }
-                            else if (cell.GetValue<string>().Contains("Slab [·o53]"))
-                            {
-                                var linearExpressionNum = cell.GetValue<string>().Split().Last();
-                                var targetCell = row.Cell("C");
-                                logger.LogInformation($"Обновляем [·o53] в столбце C с {targetCell.Value} до {roundedPriceWithCoef}");
-                                targetCell.Value = roundedPriceWithCoef;
+                                if (cellD.Contains("[·o51]"))
+                                {
+                                    var targetCell = row.Cell("C");
+                                    logger.LogInformation($"Обновляем [·o51] в столбце C с {targetCell.Value} до {roundedPriceUsd}");
+                                    targetCell.Value = roundedPriceUsd;
+                                }
+                                else if (cellD.Contains("[·o52]"))
+                                {
+                                    var targetCell = row.Cell("C");
+                                    logger.LogInformation($"Обновляем [·o52] в столбце C с {targetCell.Value} до {roundedPriceWithCoef}");
+                                    targetCell.Value = roundedPriceWithCoef;
+                                }
+                                else if (cellD.Contains("[·o53]"))
+                                {
+                                    var targetCell = row.Cell("C");
+                                    logger.LogInformation($"Обновляем [·o53] в столбце C с {targetCell.Value} до {roundedPriceWithCoef}");
+                                    targetCell.Value = roundedPriceWithCoef;
+                                }
                             }
                         }
 
-                        // Сохраняем измененный файл проекта
-                        string updatedFilePath = "Updated_" + projectFilePath;
-                        projectWorkbook.SaveAs(updatedFilePath);
-                        logger.LogInformation($"Файл проекта сохранен как {updatedFilePath}");
+                        // Сохраняем изменения в файле проекта
+                        projectWorkbook.SaveAs(projectFilePath);
+                        logger.LogInformation("Файл проекта успешно обновлен.");
                     }
-
-                    logger.LogInformation("Данные успешно обновлены в файле проекта.");
                 }
                 else
                 {
-                    logger.LogWarning("Не удалось найти данные о цене арматуры в скачанном файле.");
+                    logger.LogWarning("Не найдены данные о ценах для обновления файла проекта.");
                 }
             }
             catch (Exception ex)
             {
-                logger.LogError($"Ошибка при обработке файлов: {ex.Message}");
+                logger.LogError($"Ошибка при обработке скачанного файла: {ex.Message}");
             }
-
-            logger.LogInformation("Нажмите любую клавишу для выхода...");
-            Console.ReadKey();
+            finally
+            {
+                // Удаляем скачанный файл
+                if (File.Exists(downloadedFilePath))
+                {
+                    File.Delete(downloadedFilePath);
+                    logger.LogInformation("Скачанный файл успешно удален.");
+                }
+            }
         }
     }
 }
